@@ -226,7 +226,7 @@ public void takeScreenshot(final int sceneNavTag, final String fileName,
                         returnMap.putString(RECORDING_URL_KEY, qrCodeUrl);
                     } else {
                         returnMap.putBoolean(RECORDING_SUCCESS_KEY, false);
-                        returnMap.putInt(RECORDING_ERROR_KEY, Error.QR_CODE_NOT_FOUND.toInt());
+                        returnMap.putInt(RECORDING_ERROR_KEY, Error.NONE.toInt());
                         returnMap.putString(RECORDING_URL_KEY, null);
                     }
                     promise.resolve(returnMap);
