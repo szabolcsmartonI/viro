@@ -52,6 +52,12 @@ import com.viro.core.ViroMediaRecorder.Error;
 import com.viro.core.ViroViewARCore;
 import com.viromedia.bridge.component.VRTARSceneNavigator;
 
+import com.google.zxing.BinaryBitmap;
+import com.google.zxing.Result;
+import com.google.zxing.common.HybridBinarizer;
+import com.google.zxing.qrcode.QRCodeReader;
+import com.google.zxing.RGBLuminanceSource;
+
 @ReactModule(name = "VRTARSceneNavigatorModule")
 public class ARSceneNavigatorModule extends ReactContextBaseJavaModule {
     private static final int UNSUPPORTED_PLATFORM_ERROR = 6;
@@ -175,62 +181,83 @@ public class ARSceneNavigatorModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void takeScreenshot(final int sceneNavTag, final String fileName,
-                               final boolean saveToCameraRool, final Promise promise) {
-        UIManagerModule uiManager = getReactApplicationContext().getNativeModule(UIManagerModule.class);
-        uiManager.addUIBlock(new UIBlock() {
-            @Override
-            public void execute(NativeViewHierarchyManager nativeViewHierarchyManager) {
-                View sceneView = nativeViewHierarchyManager.resolveView(sceneNavTag);
-                if (!(sceneView instanceof VRTARSceneNavigator)) {
-                    throw new IllegalViewOperationException("Viro: Attempted to call startVideoRecording on a non-ARSceneNav view!");
-                }
-                VRTARSceneNavigator scene = (VRTARSceneNavigator) sceneView;
+public void takeScreenshot(final int sceneNavTag, final String fileName,
+                           final boolean saveToCameraRool, final Promise promise) {
+    UIManagerModule uiManager = getReactApplicationContext().getNativeModule(UIManagerModule.class);
+    uiManager.addUIBlock(new UIBlock() {
+        @Override
+        public void execute(NativeViewHierarchyManager nativeViewHierarchyManager) {
+            View sceneView = nativeViewHierarchyManager.resolveView(sceneNavTag);
+            if (!(sceneView instanceof VRTARSceneNavigator)) {
+                throw new IllegalViewOperationException("Viro: Attempted to call startVideoRecording on a non-ARSceneNav view!");
+            }
+            VRTARSceneNavigator scene = (VRTARSceneNavigator) sceneView;
 
-                // Grab the recorder from the ar scene view
-                final ViroMediaRecorder recorder = scene.getARView().getRecorder();
-                if (recorder == null){
+            // Grab the recorder from the ar scene view
+            final ViroMediaRecorder recorder = scene.getARView().getRecorder();
+            if (recorder == null){
+                WritableMap returnMap = Arguments.createMap();
+                returnMap.putBoolean(RECORDING_SUCCESS_KEY, false);
+                returnMap.putInt(RECORDING_ERROR_KEY, UNSUPPORTED_PLATFORM_ERROR);
+                returnMap.putString(RECORDING_URL_KEY, null);
+                promise.resolve(returnMap);
+                return;
+            }
+
+            // Construct a completion delegate callback to be notified of screenshot results.
+            final ViroMediaRecorder.ScreenshotFinishListener callback = new ViroMediaRecorder.ScreenshotFinishListener() {
+                @Override
+                public void onError(Error error) {
                     WritableMap returnMap = Arguments.createMap();
                     returnMap.putBoolean(RECORDING_SUCCESS_KEY, false);
-                    returnMap.putInt(RECORDING_ERROR_KEY, UNSUPPORTED_PLATFORM_ERROR);
+                    returnMap.putInt(RECORDING_ERROR_KEY, error.toInt());
                     returnMap.putString(RECORDING_URL_KEY, null);
                     promise.resolve(returnMap);
-                    return;
                 }
 
-                // Construct a completion delegate callback to be notified of sceenshot results.
-                final ViroMediaRecorder.ScreenshotFinishListener callback = new ViroMediaRecorder.ScreenshotFinishListener() {
-                    @Override
-                    public void onError(Error error) {
-                        WritableMap returnMap = Arguments.createMap();
-                        returnMap.putBoolean(RECORDING_SUCCESS_KEY, false);
-                        returnMap.putInt(RECORDING_ERROR_KEY, error.toInt());
-                        returnMap.putString(RECORDING_URL_KEY, null);
-                        promise.resolve(returnMap);
-                    }
-
-                    @Override
-                    public void onSuccess(Bitmap bitmap, String url) {
-                        WritableMap returnMap = Arguments.createMap();
+                @Override
+                public void onSuccess(Bitmap bitmap, String url) {
+                    // QR code detection
+                    String qrCodeUrl = detectQRCode(bitmap);
+                    WritableMap returnMap = Arguments.createMap();
+                    if (qrCodeUrl != null) {
                         returnMap.putBoolean(RECORDING_SUCCESS_KEY, true);
                         returnMap.putInt(RECORDING_ERROR_KEY, Error.NONE.toInt());
-                        returnMap.putString(RECORDING_URL_KEY, url);
-                        promise.resolve(returnMap);
+                        returnMap.putString(RECORDING_URL_KEY, qrCodeUrl);
+                    } else {
+                        returnMap.putBoolean(RECORDING_SUCCESS_KEY, false);
+                        returnMap.putInt(RECORDING_ERROR_KEY, Error.QR_CODE_NOT_FOUND.toInt());
+                        returnMap.putString(RECORDING_URL_KEY, null);
                     }
-                };
-                
-                // Schedule taking a screen shot if we have the right permission
-                checkPermissionsAndRun(new PermissionListener() {
-                    @Override
-                    public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-                        recorder.takeScreenShotAsync(fileName, saveToCameraRool, callback);
-                        return true;
-                    }
-                }, false);
-            }
-        });
-    }
+                    promise.resolve(returnMap);
+                }
 
+                private String detectQRCode(Bitmap bitmap) {
+                    int[] intArray = new int[bitmap.getWidth() * bitmap.getHeight()];
+                    bitmap.getPixels(intArray, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
+                    RGBLuminanceSource source = new RGBLuminanceSource(bitmap.getWidth(), bitmap.getHeight(), intArray);
+                    BinaryBitmap binaryBitmap = new BinaryBitmap(new HybridBinarizer(source));
+                    QRCodeReader reader = new QRCodeReader();
+                    try {
+                        Result result = reader.decode(binaryBitmap);
+                        return result.getText();
+                    } catch (Exception e) {
+                        return null;
+                    }
+                }
+            };
+
+            // Schedule taking a screenshot if we have the right permission
+            checkPermissionsAndRun(new PermissionListener() {
+                @Override
+                public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+                    recorder.takeScreenShotAsync(fileName, saveToCameraRool, callback);
+                    return true;
+                }
+            }, false);
+        }
+    });
+}
     @ReactMethod
     public void resetARSession(final int sceneNavTag, final boolean resetTracking, final boolean removeAnchors) {
         UIManagerModule uiManager = getReactApplicationContext().getNativeModule(UIManagerModule.class);
