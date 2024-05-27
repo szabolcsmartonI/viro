@@ -33,6 +33,7 @@ dependencies {
     implementation 'com.google.ar:core:1.41.0'
     implementation project(':gvr_common')
     implementation project(':viro_renderer')
+    implementation 'com.google.zxing:core:3.4.1'
     implementation 'com.google.android.exoplayer:exoplayer:2.19.1'
     implementation 'com.google.protobuf.nano:protobuf-javanano:3.1.0'
     implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
