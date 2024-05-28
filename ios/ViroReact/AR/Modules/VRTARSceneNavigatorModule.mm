@@ -30,6 +30,7 @@
 #import "VRTARSceneNavigator.h"
 #import <React/RCTUIManagerUtils.h>
 #import "VRTUtils.h"
+#import <ZXingObjC/ZXingObjC.h>
 
 @implementation VRTARSceneNavigatorModule
 @synthesize bridge = _bridge;
@@ -79,6 +80,29 @@ RCT_EXPORT_METHOD(stopVideoRecording:(nonnull NSNumber *)reactTag
     }];
 }
 
+
+// Method to decode QR code from UIImage
+- (NSString *)decodeQRCodeFromImage:(UIImage *)image {
+    if (!image) {
+        return nil;
+    }
+    
+    CGImageRef cgImage = image.CGImage;
+    ZXLuminanceSource *source = [[ZXCGImageLuminanceSource alloc] initWithCGImage:cgImage];
+    ZXBinaryBitmap *bitmap = [ZXBinaryBitmap binaryBitmapWithBinarizer:[ZXHybridBinarizer hybridBinarizerWithSource:source]];
+    
+    NSError *error = nil;
+    ZXDecodeHints *hints = [ZXDecodeHints hints];
+    ZXQRCodeReader *reader = [ZXQRCodeReader new];
+    ZXResult *result = [reader decode:bitmap hints:hints error:&error];
+    
+    if (result) {
+        return result.text;
+    } else {
+        return nil;
+    }
+}
+
 RCT_EXPORT_METHOD(takeScreenshot:(nonnull NSNumber *)reactTag
                         fileName:(NSString *)fileName
                 saveToCameraRoll:(BOOL)saveToCameraRoll
@@ -92,16 +116,30 @@ RCT_EXPORT_METHOD(takeScreenshot:(nonnull NSNumber *)reactTag
             VRTARSceneNavigator *component = (VRTARSceneNavigator *)view;
             [component takeScreenshot:fileName
                      saveToCameraRoll:saveToCameraRoll
-                    completionHandler:^(BOOL success, NSURL *url,  NSURL *gifPath, NSInteger errorCode) {
+                    completionHandler:^(BOOL success, NSURL *url, NSURL *gifPath, NSInteger errorCode) {
                 NSMutableDictionary *toReturn = [NSMutableDictionary new];
                 [toReturn setObject:@(success) forKey:kVRTRecordingKeySuccess];
-                if (url) [toReturn setObject:[url path] forKey:kVRTRecordingKeyUrl];
                 [toReturn setObject:@(errorCode) forKey:kVRTRecordingKeyErrorCode];
+
+                RCTLogInfo(@"Taking screenshot for reactTag: %@", reactTag);
+
+                if (success) {
+                    NSData *imageData = [NSData dataWithContentsOfURL:url];
+                    UIImage *image = [UIImage imageWithData:imageData];
+                    NSString *decodedURL = [self decodeQRCodeFromImage:image];
+                    if (decodedURL) [toReturn setObject:decodedURL forKey:kVRTRecordingKeyUrl];
+                } else {
+                    [toReturn setObject:nil forKey:kVRTRecordingKeyUrl]
+                }
+
                 resolve(toReturn);
             }];
         }
     }];
 }
+
+
+
 
 RCT_EXPORT_METHOD(resetARSession:(nonnull NSNumber *)reactTag
                   resetTracking:(BOOL)resetTracking
