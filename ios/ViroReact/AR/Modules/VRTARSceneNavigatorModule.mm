@@ -27,7 +27,7 @@
 
 #import <React/RCTUIManager.h>
 #import "VRTARSceneNavigatorModule.h"
-#import "VRTARSceneNavigator.h"
+#import "../Views/VRTARSceneNavigator.h"
 #import <React/RCTUIManagerUtils.h>
 #import "VRTUtils.h"
 #import <ZXingObjC/ZXingObjC.h>
@@ -89,19 +89,21 @@ RCT_EXPORT_METHOD(stopVideoRecording:(nonnull NSNumber *)reactTag
     
     CGImageRef cgImage = image.CGImage;
     ZXLuminanceSource *source = [[ZXCGImageLuminanceSource alloc] initWithCGImage:cgImage];
-    ZXBinaryBitmap *bitmap = [ZXBinaryBitmap binaryBitmapWithBinarizer:[ZXHybridBinarizer hybridBinarizerWithSource:source]];
+    ZXBinaryBitmap *bitmap = [[ZXBinaryBitmap alloc] initWithBinarizer:[[ZXHybridBinarizer alloc] initWithSource:source]];
     
     NSError *error = nil;
     ZXDecodeHints *hints = [ZXDecodeHints hints];
-    ZXQRCodeReader *reader = [ZXQRCodeReader new];
+    ZXQRCodeReader *reader = [[ZXQRCodeReader alloc] init];
     ZXResult *result = [reader decode:bitmap hints:hints error:&error];
     
     if (result) {
         return result.text;
     } else {
+        NSLog(@"Error decoding QR code: %@", error.localizedDescription);
         return nil;
     }
 }
+
 
 RCT_EXPORT_METHOD(takeScreenshot:(nonnull NSNumber *)reactTag
                         fileName:(NSString *)fileName
@@ -129,7 +131,7 @@ RCT_EXPORT_METHOD(takeScreenshot:(nonnull NSNumber *)reactTag
                     NSString *decodedURL = [self decodeQRCodeFromImage:image];
                     if (decodedURL) [toReturn setObject:decodedURL forKey:kVRTRecordingKeyUrl];
                 } else {
-                    [toReturn setObject:nil forKey:kVRTRecordingKeyUrl]
+                    [toReturn setObject:nil forKey:kVRTRecordingKeyUrl];
                 }
 
                 resolve(toReturn);

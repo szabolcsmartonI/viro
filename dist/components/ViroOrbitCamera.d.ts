@@ -16,5 +16,5 @@ export declare class ViroOrbitCamera extends React.Component<Props> {
     componentWillUnmount(): void;
     componentDidUpdate(prevProps: Props, _prevState: any): void;
     setNativeProps: (nativeProps: Props) => void;
-    render(): JSX.Element;
+    render(): React.JSX.Element;
 }
